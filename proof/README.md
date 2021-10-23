@@ -1,0 +1,1 @@
+The proof compiles with Agda version 2.6.1.3 and Agda stdlib version 1.6.
