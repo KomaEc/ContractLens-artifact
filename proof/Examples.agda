@@ -61,37 +61,6 @@ module Overview where
   calculation cs l-data = Theorems.bfold-map-fusion cs CommonConditions.true-cond (CommonConditions.filter-cond CommonConditions.true-cond even) l-data (bfilter-alg even , refl , refl)
 
     
-module HyperplaneProjection where
-
-  fork-scond : {A B : Set} →
-               (cs : A → A → Set) →
-               (f : A → B) →
-               A → A → Set
-  fork-scond cs f x x′ = cs x x′ × f x ≡ f x′
-
-
-  data fork-vcond {A B : Set} (cs : A → A → Set) (f : A → B) : (B × A) → (B × A) → Set where
-    ok : ∀ {x x′} → cs x x′ → f x ≡ f x′ → fork-vcond cs f (f x , x) (f x′ , x′)
- 
-
-  bforkid : ∀ {A B : Set} →
-            (cs : A → A → Set) →
-            (f : A → B) →
-            Lens A (B × A)
-  get (bforkid cs f) x = f x , x
-  put (bforkid cs f) _ (_ , x)= x
-  P (bforkid cs f) = fork-scond cs f
-  Q (bforkid cs f) = fork-vcond cs f
-  backward-validity (bforkid cs f) (ok csxx eq) = csxx , eq
-  forward-validity (bforkid cs f) (csxx , eq) = ok csxx eq
-  conditioned-get-put (bforkid cs f) (csxx , refl) = refl
-  conditioned-put-get (bforkid cs f) (ok _ _) = refl
-
-  mean : List Float → Float
-  mean xs = Agda.Builtin.Float.primFloatDiv (foldr _f+_ 0.0 xs) (Agda.Builtin.Float.primNatToFloat (length xs))
-
-  bmean : Lens (List Float) (Float × List Float)
-  bmean = bforkid CommonConditions.eq-length mean
 
 
 module MaximumSegmentSum where
