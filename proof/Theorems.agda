@@ -34,18 +34,41 @@ bfold-fusion : ∀ {S : Set} {V T : Set} →
                 {bxalg₁-data : Σ (Lens (Maybe (S × V)) V) λ l → l hasConditions (λ _ _ → ⊤) and (λ _ _ → ⊤)} →
                 {bxalg₂-data : Σ (Lens (Maybe (S × T)) T) λ l → l hasConditions (λ _ _ → ⊤) and (λ _ _ → ⊤)} →
                   ((proj₁ bxalg₁-data) ； l
-                               [ (λ {v} {v'} _ → transport′ (sym (cong (λ pred → pred v v')  (proj₂ (proj₂ bxalg₁-data)))) tt)
-                               , (λ {v} {v'} _ → transport′ (sym (cong (λ pred → pred v v')  (proj₁ l-conds))) tt) ] )
+                               [ (λ {v} {v'} _ → transport′ (sym (cong (λ pred → pred v v')  (proj₂ (proj₂ bxalg₁-data)))) tt) , (λ {v} {v'} _ → transport′ (sym (cong (λ pred → pred v v')  (proj₁ l-conds))) tt) ] )
                 ≈
                   (blistf (get (proj₁ bxalg₁-data) nothing) (l , l-conds) ； (proj₁ bxalg₂-data)
-                               [ (λ {v} {v'} _ → tt)
-                               , (λ {v} {v'} _ → transport′ (sym (cong (λ pred → pred v v')  (proj₁ (proj₂ bxalg₂-data)))) tt) ] ) →
+                               [ (λ {v} {v'} _ → tt) , (λ {v} {v'} _ → transport′ (sym (cong (λ pred → pred v v')  (proj₁ (proj₂ bxalg₂-data)))) tt) ] )
+                →
                   (bxfold bxalg₁-data  ； l
-                          [ (λ {v} {v'} _ → tt) , (λ {v} {v'} _ → transport′ (sym (cong (λ pred → pred v v')  (proj₁ l-conds))) tt) ])
+                               [ (λ {v} {v'} _ → tt) , (λ {v} {v'} _ → transport′ (sym (cong (λ pred → pred v v')  (proj₁ l-conds))) tt) ])
                 ≈
                   bxfold bxalg₂-data
 bfold-fusion = Core.bxfold-fusion
 
+
+bfold′-fusion : ∀ {S V T : Set} →
+                 (cs : S → S → Set) →
+                 (cv : V → V → Set) →
+                 (ct : T → T → Set) →
+                 (bxalg₁-data : Σ (Lens (Maybe (S × V)) V)
+                               λ l → l hasConditions (CommonConditions.lift cs cv)
+                                       and           cv) →
+                 (l-data : Σ (Lens V T) λ l → l hasConditions cv and ct) →
+                 (bxalg₂-data : Σ (Lens (Maybe (S × T)) T)
+                               λ l → l hasConditions (CommonConditions.lift cs ct)
+                                     and             ct) →
+                 ((proj₁ bxalg₁-data ； proj₁ l-data
+                          -- composition condition
+                          [ (λ {v} {v′} cvvv → transport′ (sym (cong (λ pred → pred v v′)  (proj₂ (proj₂ bxalg₁-data)))) (transport′ (cong (λ pred → pred v v′) (proj₁ (proj₂ l-data))) cvvv)) , (λ {v} {v′} cvvv → transport′ (sym (cong (λ pred → pred v v′)  (proj₁ (proj₂ l-data)))) (transport′ (cong (λ pred → pred v v′) (proj₂ (proj₂ bxalg₁-data))) cvvv)) ])
+                 ≈ blistf′ cs cv ct l-data ； proj₁ bxalg₂-data
+                           -- composition condition
+                           [ (λ {v} {v′} cvv → transport′ (cong (λ pred → pred v v′) (proj₁ (proj₂ bxalg₂-data))) cvv)  , (λ {v} {v′} cvv → transport′ (cong (λ pred → pred v v′) (sym (proj₁ (proj₂ bxalg₂-data)))) cvv) ] )
+                 →
+                 bxfold-conditioned cs cv bxalg₁-data ； proj₁ l-data
+                           -- composition condition
+                           [ (λ {v} {v′} → transport′ (cong-app (cong-app (proj₁ (proj₂ l-data)) v) v′))  , (λ {v} {v′} → transport′ (cong-app (cong-app (sym (proj₁ (proj₂ l-data))) v) v′)) ]
+                 ≈ bxfold-conditioned cs ct bxalg₂-data
+bfold′-fusion = Core.bxfold′-fusion
 
 
 
@@ -118,7 +141,7 @@ bscanl-lemma : ∀ {S V : Set} →
                                  and            λ { (_ , b) (b′ , b′′) → Q̃ b b′ × b ≡ b′′ }) →
                (f-data
                  : Σ (Maybe (S × V) → V)
-                   λ f → (∀ {x} {y} → get (proj₁ l-data) (x , y) ≡ (f x , y)) × b₀ ≡ f nothing) →
+                   λ f → (∀ {x} {y} → get (proj₁ l-data) (x , y) ≡ (f x , y))) →
                 
                bxinits ； (bxmap-depl {P̃ = CommonConditions.is-init} {Q̃ = Q̃}
                                        []
@@ -137,5 +160,5 @@ modified-hornor's-rule : bxtails-dep-init ；
                          spec-bxmap-sum [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ] ；
                          bxmaximum-dep [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ]
                          ≈
-                         bxfoldl-inits {Q̃ = CommonConditions.true-cond} -∞ (bx-⊕ , refl , refl) (⊕-listf , (λ {_} {_} → refl) , refl)
+                         bxfoldl-inits {Q̃ = CommonConditions.true-cond} -∞ (bx-⊕ , refl , refl) (⊕-listf , refl)
 modified-hornor's-rule = Core.hornor-rule

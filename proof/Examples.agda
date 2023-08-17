@@ -61,6 +61,37 @@ module Overview where
   calculation cs l-data = Theorems.bfold-map-fusion cs CommonConditions.true-cond (CommonConditions.filter-cond CommonConditions.true-cond even) l-data (bfilter-alg even , refl , refl)
 
     
+module HyperplaneProjection where
+
+  fork-scond : {A B : Set} →
+               (cs : A → A → Set) →
+               (f : A → B) →
+               A → A → Set
+  fork-scond cs f x x′ = cs x x′ × f x ≡ f x′
+
+
+  data fork-vcond {A B : Set} (cs : A → A → Set) (f : A → B) : (B × A) → (B × A) → Set where
+    ok : ∀ {x x′} → cs x x′ → f x ≡ f x′ → fork-vcond cs f (f x , x) (f x′ , x′)
+ 
+
+  bforkid : ∀ {A B : Set} →
+            (cs : A → A → Set) →
+            (f : A → B) →
+            Lens A (B × A)
+  get (bforkid cs f) x = f x , x
+  put (bforkid cs f) _ (_ , x)= x
+  P (bforkid cs f) = fork-scond cs f
+  Q (bforkid cs f) = fork-vcond cs f
+  backward-validity (bforkid cs f) (ok csxx eq) = csxx , eq
+  forward-validity (bforkid cs f) (csxx , eq) = ok csxx eq
+  conditioned-get-put (bforkid cs f) (csxx , refl) = refl
+  conditioned-put-get (bforkid cs f) (ok _ _) = refl
+
+  mean : List Float → Float
+  mean xs = Agda.Builtin.Float.primFloatDiv (foldr _f+_ 0.0 xs) (Agda.Builtin.Float.primNatToFloat (length xs))
+
+  bmean : Lens (List Float) (Float × List Float)
+  bmean = bforkid CommonConditions.eq-length mean
 
 
 module MaximumSegmentSum where
@@ -87,11 +118,11 @@ module MaximumSegmentSum where
 
   bmss-defn : Lens (List ℤω) ℤω
   bmss-defn = binits ；
-              bmapl [] (btails-inits , refl , refl) ((λ xs → tails xs , xs , refl) , (λ {a} {a′} → refl))
+              bmapl-comb [] (btails-inits , refl , refl) ((λ xs → tails xs , xs , refl) , (λ {a} {a′} → refl))
                 [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ] ；
-              bmapl ([] , [] , refl) (bmap-sum , refl , refl) ((λ { (xss , _ , _) → map sum xss}) , λ {a} {a′} → refl)
+              bmapl-comb ([] , [] , refl) (bmap-sum , refl , refl) ((λ { (xss , _ , _) → map sum xss}) , λ {a} {a′} → refl)
                 [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ] ；
-              bmapl [] (bmaximum2 , refl , refl) (maximum , refl)
+              bmapl-comb [] (bmaximum2 , refl , refl) (maximum , refl)
                 [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ] ；
               bmaximum′
                 [ (λ {v} {v'} ∣v∣≡∣v'∣ → ConsecutivePairsProperties.cp-true , ∣v∣≡∣v'∣)
@@ -100,7 +131,7 @@ module MaximumSegmentSum where
 
   bmss-intermediate₁ : Lens (List ℤω) ℤω
   bmss-intermediate₁ = binits ；
-                       bmapl [] ((btails-inits ；
+                       bmapl-comb [] ((btails-inits ；
                                   bmap-sum
                                     [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ] ；
                                   bmaximum2
@@ -113,8 +144,8 @@ module MaximumSegmentSum where
 
   bmss-intermediate₂ : Lens (List ℤω) ℤω
   bmss-intermediate₂ = binits ；
-                       bmapl []
-                         ((bfold-inits -∞ (bx-⊕ , refl , refl) (⊕-listf , refl , refl)) , refl , refl)
+                       bmapl-comb []
+                         ((bfold-inits -∞ (bx-⊕ , refl , refl) (⊕-listf , refl)) , refl , refl)
                          (FoldlInits-Helper.g′ bx-⊕ -∞ , refl)
                          [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ] ；
                        bmaximum′
@@ -122,7 +153,7 @@ module MaximumSegmentSum where
 
 
   bmss-optimized : Lens (List ℤω) ℤω
-  bmss-optimized = bscanl -∞ (bx-⊕ , refl , refl) (⊕-listf , refl , refl) ；
+  bmss-optimized = bscanl-comb -∞ (bx-⊕ , refl , refl) (⊕-listf , refl) ；
                    bxmaximum′
                      [ (λ {v} {v'} ∣v∣≡∣v'∣ → ConsecutivePairsProperties.cp-true , ∣v∣≡∣v'∣)
                      , (λ { {v} {v'} (_ ,  ∣v∣≡∣v'∣) →  ∣v∣≡∣v'∣ }) ]
@@ -130,19 +161,19 @@ module MaximumSegmentSum where
 
   module Helper where
     ℓ₁ = binits
-    ℓ₂ = bmapl {S = List ℤω} [] (btails-inits , refl , refl) ((λ xs → tails xs , xs , refl) , (λ {a} {a′} → refl))
-    ℓ₃ = bmapl ([] , [] , refl) (bmap-sum , refl , refl) ((λ { (xss , _ , _) → map sum xss}) , λ {a} {a′} → refl)
-    ℓ₄ = bmapl [] (bmaximum2 , refl , refl) (maximum , refl)
-    ℓ₅ = bmapl [] ((btails-inits ；
+    ℓ₂ = bmapl-comb {S = List ℤω} [] (btails-inits , refl , refl) ((λ xs → tails xs , xs , refl) , (λ {a} {a′} → refl))
+    ℓ₃ = bmapl-comb ([] , [] , refl) (bmap-sum , refl , refl) ((λ { (xss , _ , _) → map sum xss}) , λ {a} {a′} → refl)
+    ℓ₄ = bmapl-comb [] (bmaximum2 , refl , refl) (maximum , refl)
+    ℓ₅ = bmapl-comb [] ((btails-inits ；
                    bmap-sum [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ] ；
                    bmaximum2 [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ])
                                 , refl , refl) ((λ xs → maximum (map sum (tails xs))) , (λ {a} {a′} → refl))
-    ℓ₅′ = bmapl [] ((btails-inits ；
+    ℓ₅′ = bmapl-comb [] ((btails-inits ；
                    bmap-sum [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ]) , refl , refl)
                    (map sum ∘ tails , (λ {a} {a′} → refl))
-    ℓ₆ = bmapl [] ((bfold-inits -∞ (bx-⊕ , refl , refl) (⊕-listf , refl , refl)) , refl , refl)
+    ℓ₆ = bmapl-comb [] ((bfold-inits -∞ (bx-⊕ , refl , refl) (⊕-listf , refl)) , refl , refl)
                   (FoldlInits-Helper.g′ bx-⊕ -∞ , refl)
-    ℓ₇ = bscanl -∞ (bx-⊕ , refl , refl) (⊕-listf , refl , refl)
+    ℓ₇ = bscanl-comb -∞ (bx-⊕ , refl , refl) (⊕-listf , refl)
 
 
   step₁ : bmss-defn ≈ bmss-intermediate₁
@@ -261,7 +292,7 @@ module MaximumSegmentSum where
                        bmap-sum [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ] ；
                        bmaximum2 [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ]) , refl , refl)
                      ((λ xs → maximum (map sum (tails xs))) , (λ {a} {a′} → refl))
-                     ((bfold-inits -∞ (bx-⊕ , refl , refl) (⊕-listf , refl , refl)) , refl , refl)
+                     ((bfold-inits -∞ (bx-⊕ , refl , refl) (⊕-listf , refl)) , refl , refl)
                      (FoldlInits-Helper.g′ bx-⊕ -∞ , refl) Core.uni-hornor-rule Theorems.modified-hornor's-rule)
     where
       open Helper
@@ -275,7 +306,7 @@ module MaximumSegmentSum where
                     , (λ { {v} {v'} (_ ,  ∣v∣≡∣v'∣) →  ∣v∣≡∣v'∣ }))
                     ((λ {v} {v'} ∣v∣≡∣v'∣ → ConsecutivePairsProperties.cp-true , ∣v∣≡∣v'∣)
                     , (λ { {v} {v'} (_ ,  ∣v∣≡∣v'∣) →  ∣v∣≡∣v'∣ }))
-                    (Theorems.bscanl-lemma -∞ (bx-⊕ , refl , refl) (⊕-listf , refl , refl))
+                    (Theorems.bscanl-lemma -∞ (bx-⊕ , refl , refl) (⊕-listf , refl))
     where
       open Helper
                

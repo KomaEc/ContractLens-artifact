@@ -259,7 +259,94 @@ module Map-Helper {S V : Set} (l : Lens (S × S) (V × V)) where
   p-aux a₀ b₀ [] (x ∷ bs) = [] -- failed branch
   p-aux a₀ b₀ (x ∷ as) [] = [] -- failed branch
   p-aux a₀ b₀ (a ∷ as) (b ∷ bs) = proj₁ (put l (a , a₀) (b , b₀)) ∷ p-aux (proj₁ (put l (a , a₀) (b , b₀))) b as bs
+
+
+
+bmapl-component : ∀ {S V : Set} → {P : S → S → Set} → {Q : V → V → Set} →
+  (ℓ-data : (a : S) → (Σ (Lens S V) λ ℓ → ℓ hasConditions (λ _ a′ → P a a′) and λ _ b′ → Q (get ℓ a) b′)) →
+  (Σ (S → V) λ f → ∀ (a a′ : S) → get (proj₁ (ℓ-data a)) a′ ≡ f a′) →
+  (Σ (Σ (Lens (S × S) (V × V))
+                       (λ l → l hasConditions (CommonConditions.map-dep-cond {S} P)
+                               and            CommonConditions.map-dep-cond {V} Q)) λ ℓ-data → (Σ (S → V) λ f →  (∀ {a a′} → get (proj₁ ℓ-data) (a , a′) ≡ (f a , f a′))))
+                      
+bmapl-component {S} {V} {P̂} {Q̂} ℓ-data (f , f-eq) = (l , (refl , refl)) , f , refl
+  where
+    l : Lens (S × S) (V × V)
+    get l = λ (a , a′) → f a , f a′
+    put l = λ (a , a′) (b , b′) → (put (proj₁ (ℓ-data a′)) a b , a′)
+    P l = CommonConditions.map-dep-cond {S} P̂
+    Q l = CommonConditions.map-dep-cond {V} Q̂
+    backward-validity l {a , a′} {b , b′} (view-cond₁ , refl) with proj₂ (ℓ-data a′)
+    ... | source-cond-eq , view-cond-eq with backward-validity (proj₁ (ℓ-data a′)) {a} {b} (transport′ (cong (λ x → Q (proj₁ (ℓ-data a′)) x b) (sym (f-eq a′ a))) (transport′ (cong (λ pred → pred (f a) b) (sym view-cond-eq)) (transport′ ((cong (λ x → Q̂ x b)  (sym (f-eq a′ a′)))) view-cond₁)))
+    ... | ℓ-backward-validity = transport′ (cong (λ pred → pred a (put (proj₁ (ℓ-data a′)) a b)) source-cond-eq) ℓ-backward-validity , refl
+    forward-validity l {a , a′} (source-cond₁ , refl) with proj₂ (ℓ-data a′)
+    ... | source-cond-eq , view-cond-eq with forward-validity (proj₁ (ℓ-data a′)) {a} (transport′ (cong (λ pred → pred a a) (sym source-cond-eq) ) source-cond₁)
+    ... | ℓ-forward-validity rewrite f-eq a′ a | cong (λ pred → pred (f a) (f a)) view-cond-eq | f-eq a′ a′ = transport′ refl ℓ-forward-validity , refl
+    conditioned-get-put l {a , a′} (source-cond₁ , refl) with proj₂ (ℓ-data a′)
+    ... | source-cond-eq , _ with conditioned-get-put (proj₁ (ℓ-data a′)) {a}
+    ... | cgp rewrite f-eq a′ a | cong (λ pred → pred a a) source-cond-eq = cong₂ _,_ (cgp source-cond₁) refl
+    conditioned-put-get l {a , a′} {b , b′} (view-cond₁ , refl) with proj₂ (ℓ-data a′)
+    ... | _ , view-cond-eq with conditioned-put-get (proj₁ (ℓ-data a′)) {a} {b}
+    ... | cpg rewrite f-eq a′ a | cong (λ pred → pred (f a) b) view-cond-eq | f-eq a′ (put (proj₁ (ℓ-data a′)) a b) | f-eq a′ a′ = cong₂ _,_ (cpg view-cond₁) refl
+
+
+
+bmapl-component-reverse : ∀ {S V : Set} → {P̂ : S → S → Set} → {Q̂ : V → V → Set} →
+                          (ℓ-data : Σ (Lens (S × S) (V × V)) λ ℓ → ℓ hasConditions CommonConditions.map-dep-cond {S} P̂
+                                                                     and CommonConditions.map-dep-cond {V} Q̂) →
+                          (Σ (S → V) λ f →  (∀ {a a′} → get (proj₁ ℓ-data) (a , a′) ≡ (f a , f a′))) → 
+                          Σ ((a : S) → Σ (Lens S V) λ ℓ → ℓ hasConditions (λ _ a′ → P̂ a a′) and λ _ b′ → Q̂ (get ℓ a) b′) λ ℓ-data → (Σ (S → V) λ f → ∀ (a a′ : S) → get (proj₁ (ℓ-data a)) a′ ≡ f a′)
+bmapl-component-reverse {S} {V} {P̂} {Q̂} ℓ-data (f , f-eq) = (λ a → l a , refl , refl) , f , λ _ _ → refl
+  where
+    l : S → Lens S V
+    get (l a′) = f
+    put (l a′) = λ a b → proj₁ (put (proj₁ ℓ-data) (a , a′) (b , get (l a′) a′))
+    P (l a′) = λ _ → P̂ a′
+    Q (l a′) = λ _ → Q̂ (get (l a′) a′)
+    backward-validity (l a′) {a} {b} view-cond with change-transformation-from-lens-data ℓ-data {a , a′} {b , get (l a′) a′}
+    ... | ℓ-backward-validity rewrite cong proj₁ (f-eq {a} {a′}) | cong proj₂ (f-eq {a} {a′}) = proj₁ (ℓ-backward-validity (view-cond , refl))
+    forward-validity (l a′) {a} source-cond with forward-validity-from-lens-data ℓ-data {a , a′}
+    ... | ℓ-forward-validity rewrite cong proj₁ (f-eq {a} {a′}) | cong proj₂ (f-eq {a} {a′}) = proj₁ (ℓ-forward-validity (source-cond , refl))
+    conditioned-get-put (l a′) {a} source-cond with get-put-law-from-lens-data ℓ-data {a , a′}
+    ... | cgp rewrite f-eq {a} {a′} = cong proj₁ (cgp (source-cond , refl))
+    conditioned-put-get (l a′) {a} {b} view-cond with put-get-law-from-lens-data ℓ-data {a , a′} {b , get (l a′) a′}
+    ... | cpg with put (proj₁ ℓ-data) (a , a′) (b , f a′)
+    ... | (a′′ , a′′′) rewrite f-eq {a′′} {a′′′} | f-eq {a} {a′} = cong proj₁ (cpg (view-cond , refl))
   
+
+bmapl-component-right-inverse : ∀ {S V : Set} → {P : S → S → Set} → {Q : V → V → Set} →
+                                (ℓ-data : (a : S) → (Σ (Lens S V) λ ℓ → ℓ hasConditions (λ _ a′ → P a a′) and λ _ b′ → Q (get ℓ a) b′)) →
+                                (f-data : Σ (S → V) λ f → ∀ (a a′ : S) → get (proj₁ (ℓ-data a)) a′ ≡ f a′) → ∀ {a′} → proj₁ (ℓ-data a′) ≈ proj₁ (proj₁ (Data.Product.uncurry bmapl-component-reverse (bmapl-component {P = P} {Q = Q}  ℓ-data f-data)) a′) 
+bmapl-component-right-inverse {S} {V} {P} {Q} ℓ-data (f , f-eq) {a′} with proj₂ (ℓ-data a′)
+... | source-cond-eq , view-cond-eq =
+  (λ {s} {s′} → cong (λ pred → pred s s′) source-cond-eq) ,
+  ((λ {v} {v′} → trans (cong (λ pred → pred v v′) view-cond-eq) (cong (λ v → Q v v′) (f-eq a′ a′)) ) ,
+  ((λ {s} → f-eq a′ s) ,
+  λ {s} {v} view-cond → refl))
+
+
+bmapl-component-reverse-right-inverse : ∀ {S V : Set} → {P : S → S → Set} → {Q : V → V → Set} →
+                                        (ℓ-data : Σ (Lens (S × S) (V × V)) λ ℓ → ℓ hasConditions CommonConditions.map-dep-cond {S} P
+                                                                     and CommonConditions.map-dep-cond {V} Q) →
+                                        (f-data : Σ (S → V) λ f →  (∀ {a a′} → get (proj₁ ℓ-data) (a , a′) ≡ (f a , f a′))) → 
+                                        proj₁ ℓ-data ≈ proj₁ (proj₁ (Data.Product.uncurry (bmapl-component {P = P} {Q = Q}) (bmapl-component-reverse {P̂ = P} {Q̂ = Q} ℓ-data f-data)))
+bmapl-component-reverse-right-inverse {S} {V} {P̂} {Q̂} ℓ-data (f , f-eq) with proj₂ ℓ-data
+... | source-cond-eq , view-cond-eq =
+  (λ {s} {s′} → cong (λ pred → pred s s′) source-cond-eq) ,
+  (λ {v} {v′} → cong (λ pred → pred v v′) view-cond-eq) ,
+  (λ {s} → f-eq {proj₁ s} {proj₂ s}) ,
+  lemma 
+  -- λ {s} {v} view-cond → {!transport′ (cong (λ pred → pred (get (proj₁ ℓ-data) s) v) view-cond-eq) view-cond!}
+  where
+    lemma : {s : Σ S (λ x → S)} {v : Σ V (λ x → V)} →
+      Q (proj₁ ℓ-data) (get (proj₁ ℓ-data) s) v →
+      put (proj₁ ℓ-data) s v ≡
+      (proj₁ (put (proj₁ ℓ-data) s (proj₁ v , f (proj₂ s))) , proj₂ s)
+    lemma {s , s′} {v , v′} view-cond with transport′ (cong (λ pred → pred (get (proj₁ ℓ-data) (s , s′)) (v , v′)) view-cond-eq) view-cond
+    ... | cond , eq with change-transformation-from-lens-data ℓ-data (cond , eq)
+    ... | cond′ , eq′ with trans (sym (cong proj₂ (f-eq {s} {s′}))) eq
+    ... | refl with put (proj₁ ℓ-data ) (s , s′) (v , v′) | eq′
+    ... | s′′ , .s′ | refl = refl
 
 
 bxmap-depl : ∀ {S V : Set} →
@@ -363,6 +450,87 @@ bxmap-depl {S} {V} {P̃} {Q̃} a₀ l-data (f , f-eq) -- NOTE: f-eq?
       = transport′ (cong (λ b → Q̃ b (proj₁ (get (proj₁ l-data) (a , a₀))))
                          (cong proj₂ (f-eq {a} {a₀})))
                    q ∷ transport′ (cong (λ b → ConsecutivePairs Q̃ b (g-aux a as)) (sym (cong proj₁ (f-eq {a} {a₀})))) (prop₂ a as cp-P̃)
+
+
+
+
+bmapl : ∀ {S V : Set} →
+         {P : S → S → Set} →
+         {Q : V → V → Set} →
+         (a₀ : S) →
+         (ℓ-data : (a : S) → (Σ (Lens S V) λ ℓ → ℓ hasConditions (λ _ a′ → P a a′)
+                                                  and            λ _ b′ → Q (get ℓ a) b′)) →
+         (Σ (S → V) λ f → ∀ (a a′ : S) → get (proj₁ (ℓ-data a)) a′ ≡ f a′) → 
+         Lens (List S) (List V)
+bmapl {S} {V} {P} {Q} a₀ ℓ-data irrelevance = bxmap-depl {S} {V} {P} {Q} a₀ (proj₁ component) (proj₂ component)
+  where
+    component = bmapl-component {P = P} {Q = Q} ℓ-data irrelevance
+
+
+；；-compose : ∀ {S V T : Set} →
+        {P : S → S → Set} →
+        {Q : V → V → Set} →
+        {R : T → T → Set} →
+        (ℓ₁-data : (a : S) → (Σ (Lens S V) λ ℓ → ℓ hasConditions (λ _ a′ → P a a′)
+                                                  and            λ _ b′ → Q (get ℓ a) b′)) →
+        (f₁-data : Σ (S → V) λ f → ∀ (a a′ : S) → get (proj₁ (ℓ₁-data a)) a′ ≡ f a′) →
+        (ℓ₂-data : (b : V) → (Σ (Lens V T) λ ℓ → ℓ hasConditions (λ _ b′ → Q b b′)
+                                                  and            λ _ c′ → R (get ℓ b) c′)) →
+        (f₂-data : Σ (V → T) λ f → ∀ (b b′ : V) → get (proj₁ (ℓ₂-data b)) b′ ≡ f b′) → 
+        Σ ((a : S) → Σ (Lens S T) λ ℓ → ℓ hasConditions (λ _ a′ → P a a′)
+                                       and λ _ c′ → R (get ℓ a) c′)
+          λ ℓ-data →  Σ (S → T) λ f → ∀ (a a′ : S) → get (proj₁ (ℓ-data a)) a′ ≡ f a′
+；；-compose {S} {V} {T} {P̂} {Q̂} {R̂} ℓ₁-data f₁-data ℓ₂-data f₂-data with f₁-data | f₂-data
+... | f₁ , f₁-eq | f₂ , f₂-eq = ℓ-data , f-data
+  where ℓ-data : (a : S) → Σ (Lens S T) λ ℓ → ℓ hasConditions (λ _ a′ → P̂ a a′)
+                                       and λ _ c′ → R̂ (get ℓ a) c′
+        ℓ-data a with ℓ₁-data a
+        ... | ℓ₁ , ℓ₁-source-cond-eq , ℓ₁-view-cond-eq  with ℓ₂-data (get ℓ₁ a)
+        ... | ℓ₂ , ℓ₂-source-cond-eq , ℓ₂-view-cond-eq = ℓ₁ ； ℓ₂
+          [ (λ {v} {v′} → transport′ (cong (λ pred → pred v v′) (trans ℓ₂-source-cond-eq (sym ℓ₁-view-cond-eq)))) ,
+          (λ {s} {s′} → transport′ (cong (λ pred → pred s s′) (trans ℓ₁-view-cond-eq (sym ℓ₂-source-cond-eq)))) ] ,
+          ℓ₁-source-cond-eq , ℓ₂-view-cond-eq
+        lemma : (a a′ : S) → get (proj₁ (ℓ-data a)) a′ ≡ f₂ (f₁ a′)
+        lemma a a′ with f₁-eq a
+        ... | f₁-eq with ℓ₁-data a
+        ... | ℓ₁ , _ with f₂-eq (get ℓ₁ a)
+        ... | f₂-eq with ℓ₂-data (get ℓ₁ a)
+        ... | ℓ₂ , _ = trans (f₂-eq (get ℓ₁ a′)) (cong f₂ (f₁-eq a′)) 
+        f-data : Σ (S → T) (λ f → (a a′ : S) → get (proj₁ (ℓ-data a)) a′ ≡ f a′)
+        f-data = f₂ ∘ f₁ , lemma
+
+
+
+
+bmapl-component-homomorphism : ∀ {S V T : Set} →
+                               {P : S → S → Set} →
+                               {Q : V → V → Set} →
+                               {R : T → T → Set} →
+                               (ℓ₁-data : (a : S) → (Σ (Lens S V) λ ℓ → ℓ hasConditions (λ _ a′ → P a a′)
+                                                                          and            λ _ b′ → Q (get ℓ a) b′)) →
+                               (f₁-data : Σ (S → V) λ f → ∀ (a a′ : S) → get (proj₁ (ℓ₁-data a)) a′ ≡ f a′) →
+                               (ℓ₂-data : (b : V) → (Σ (Lens V T) λ ℓ → ℓ hasConditions (λ _ b′ → Q b b′)
+                                                                          and            λ _ c′ → R (get ℓ b) c′)) →
+                               (f₂-data : Σ (V → T) λ f → ∀ (b b′ : V) → get (proj₁ (ℓ₂-data b)) b′ ≡ f b′) → 
+                               proj₁ (proj₁ (Data.Product.uncurry (bmapl-component {P = P} {Q = R}) (；；-compose {P = P} {Q = Q} {R = R} ℓ₁-data f₁-data ℓ₂-data f₂-data))) ≈ (proj₁ (proj₁ (bmapl-component ℓ₁-data f₁-data)) ； (proj₁ (proj₁ (bmapl-component {Q = R} ℓ₂-data f₂-data))) [ (λ {v} {v′} → transport′ (cong (λ pred → pred v v′) (trans (proj₁ (proj₂ (proj₁ (bmapl-component {Q = R} ℓ₂-data f₂-data)))) (sym (proj₂ (proj₂ (proj₁ (bmapl-component ℓ₁-data f₁-data)))))))) , (λ {s} {s′} → transport′ (cong (λ pred → pred s s′ ) (trans (proj₂ (proj₂ (proj₁ (bmapl-component ℓ₁-data f₁-data)))) (sym (proj₁ (proj₂ (proj₁ (bmapl-component {Q = R} ℓ₂-data f₂-data)))))) )) ])
+bmapl-component-homomorphism {S} {V} {T} {P̂} {Q̂} {R̂} ℓ₁-data f₁-data ℓ₂-data f₂-data with bmapl-component {Q = Q̂} ℓ₁-data f₁-data | bmapl-component {Q = R̂} ℓ₂-data f₂-data | f₁-data | f₂-data
+... | ℓ₁′-data | ℓ₂′-data | f₁ , f₁-eq | f₂ , f₂-eq =
+  (λ {s} {s′} → refl) ,
+  (λ {v} {v′} → refl) ,
+  (λ {s} → refl) ,
+  lemma
+  where lemma : {s : Σ S (λ x → S)} {v : Σ T (λ x → T)} →
+                  Σ (R̂ (f₂ (f₁ (proj₂ s))) (proj₁ v))
+                  (λ x → f₂ (f₁ (proj₂ s)) ≡ proj₂ v) →
+                  (put (proj₁ (ℓ₁-data (proj₂ s))) (proj₁ s)
+                  (put (proj₁ (ℓ₂-data (get (proj₁ (ℓ₁-data (proj₂ s))) (proj₂ s))))
+                  (get (proj₁ (ℓ₁-data (proj₂ s))) (proj₁ s)) (proj₁ v))
+                  , proj₂ s)
+                  ≡
+                (put (proj₁ (ℓ₁-data (proj₂ s))) (proj₁ s)
+                (put (proj₁ (ℓ₂-data (f₁ (proj₂ s)))) (f₁ (proj₁ s)) (proj₁ v))
+                  , proj₂ s)
+        lemma {s , s′} (_ , _) rewrite f₁-eq s′ s′ | f₁-eq s′ s = refl
 
 
 bxmap-depl-cong : ∀ {S V : Set} →
@@ -1059,9 +1227,9 @@ bxscanl : ∀ {S V : Set} →
                                   and            λ { (_ , b) (b′ , b′′) → Q̃ b b′ × b ≡ b′′ }) →
           (f-data
             : Σ (Maybe (S × V) → V)
-              λ f → (∀ {x} {y} → get (proj₁ l-data) (x , y) ≡ (f x , y)) × b₀ ≡ f nothing) →
+              λ f → (∀ {x} {y} → get (proj₁ l-data) (x , y) ≡ (f x , y))) →
           Lens (List S) (List V)
-bxscanl {S} {V} {Q̃} b₀ (l , l-conds) (f , f-eq₁ , f-eq₂)
+bxscanl {S} {V} {Q̃} b₀ (l , l-conds) (f , f-eq₁)
   = record
       { get = g
       ; put = p
@@ -1148,6 +1316,7 @@ bxscanl {S} {V} {Q̃} b₀ (l , l-conds) (f , f-eq₁ , f-eq₂)
 --| bxinits                                           --|
 ---------------------------------------------------------
 
+
 module FoldlInits-Helper {S V : Set} (l : Lens (Maybe (S × V) × V) (V × V)) where
 
   g′ : V → List S → V
@@ -1174,17 +1343,58 @@ module FoldlInits-Helper {S V : Set} (l : Lens (Maybe (S × V) × V) (V × V)) w
 
 
 
+bfoldlᵢₙᵢₜ-component-source-condition : {S V : Set} → (b : V) → Maybe (S × V) →  (m : Maybe (S × V)) → Set
+bfoldlᵢₙᵢₜ-component-source-condition b _ (just (_ , b′)) = b ≡ b′
+bfoldlᵢₙᵢₜ-component-source-condition b _ nothing = ⊥
+
+bfoldlᵢₙᵢₜ-component : ∀ {S V : Set} →
+                      (Q̂ : V → V → Set) →
+                      (ℓ-data : (b : V) → Σ (Lens (Maybe (S × V)) V) λ ℓ → ℓ hasConditions bfoldlᵢₙᵢₜ-component-source-condition b
+                                                                             and λ _ → Q̂ b) →
+                      (Σ (Maybe (S × V) → V) λ f → ∀ (b : V) → (m : Maybe (S × V)) → get (proj₁ (ℓ-data b)) m ≡ f m) →
+                      Σ (Σ (Lens (Maybe (S × V) × V) (V × V)) λ ℓ → ℓ hasConditions CommonConditions.foldl-cond {S} {V}
+                                                                      and CommonConditions.map-dep-cond Q̂)
+                        λ ℓ-data → Σ (Maybe (S × V) → V) λ f → ∀ {x} {y} → get (proj₁ ℓ-data) (x , y) ≡ (f x , y)
+bfoldlᵢₙᵢₜ-component {S} {V} Q̂ ℓ-data (f , f-eq) = (l , refl , refl) , f , refl
+  where
+    l : Lens (Maybe (S × V) × V) (V × V)
+    get l (m , b) = f m , b
+    put l (m , b) (b′ , b′′) = put (proj₁ (ℓ-data b)) m b′ , b
+    P l = CommonConditions.foldl-cond
+    Q l = CommonConditions.map-dep-cond Q̂
+    backward-validity l {m , b} {b′ , .b} (view-cond₁ , refl) with proj₂ (ℓ-data b)
+    ... | source-cond-eq , view-cond-eq with cong (λ pred → pred (get (proj₁ (ℓ-data b)) m) b′) (sym view-cond-eq)
+    ... | view-cond-eq-applied  with backward-validity (proj₁ (ℓ-data b)) {m} {b′} (transport′ view-cond-eq-applied view-cond₁)
+    ... | ℓ-backward-validity with transport′ (cong (λ pred → pred m (put (proj₁ (ℓ-data b)) m b′)) source-cond-eq) ℓ-backward-validity
+    ... | source-cond-applied with put (proj₁ (ℓ-data b)) m b′
+    ... | just (x , y) = refl , source-cond-applied
+    ... | nothing = source-cond-applied
+    forward-validity l {just (a , b) , .b} (refl , refl) with proj₂ (ℓ-data b)
+    ... | source-cond-eq , view-cond-eq with cong (λ pred → pred (just (a , b)) (just (a , b))) source-cond-eq
+    ... | source-cond-eq-applied with forward-validity (proj₁ (ℓ-data b)) {just (a , b)} (transport′ (sym source-cond-eq-applied) refl)
+    ... | ℓ-forward-validity rewrite f-eq b (just (a , b)) = transport′ (cong (λ pred → pred (f (just (a , b))) (f (just (a , b)))) view-cond-eq) ℓ-forward-validity , refl
+    conditioned-get-put l {just (a , b) , .b} (refl , refl) with conditioned-get-put (proj₁ (ℓ-data b)) {just (a , b)}
+    ... | cgp with proj₂ (ℓ-data b)
+    ... | source-cond-eq , _ with cong (λ pred → pred (just (a , b)) (just (a , b))) source-cond-eq
+    ... | source-cond-eq-applied rewrite f-eq b (just (a , b)) = cong₂ _,_ (cgp (transport′ (sym source-cond-eq-applied) refl)) refl
+    conditioned-put-get l {m , b} {b′ , .b} (view-cond₁ , refl) with proj₂ (ℓ-data b)
+    ... | _ , view-cond-eq with cong (λ pred → pred (get (proj₁ (ℓ-data b)) m) b′) (sym view-cond-eq)
+    ... | view-cond-eq-applied with transport′ view-cond-eq-applied view-cond₁
+    ... | view-cond′ with conditioned-put-get (proj₁ (ℓ-data b)) {m} {b′}
+    ... | cpg rewrite f-eq b (put (proj₁ (ℓ-data b)) m b′) = cong₂ _,_ (cpg view-cond′) refl
+
+
 bxfoldl-inits : ∀ {S V : Set} →
                 {Q̃ : V → V → Set} →
                 (b₀ : V) →
                 (l-data : Σ (Lens (Maybe (S × V) × V) (V × V))
                           λ l → l hasConditions (CommonConditions.foldl-cond {S} {V} ) 
-                                  and            λ { (_ , b) (b′ , b′′) → Q̃ b b′ × b ≡ b′′ }) →
+                                  and            CommonConditions.map-dep-cond Q̃) →
                 (f-data
                   : Σ (Maybe (S × V) → V)
-                    λ f → (∀ {x} {y} → get (proj₁ l-data) (x , y) ≡ (f x , y)) × b₀ ≡ f nothing) →
+                    λ f → (∀ {x} {y} → get (proj₁ l-data) (x , y) ≡ (f x , y))) →
                 Lens (List S × List S) (V × V)
-bxfoldl-inits {S} {V} {Q̃} b₀ (l , l-conds) (f , f-eq₁ , f-eq₂)
+bxfoldl-inits {S} {V} {Q̃} b₀ (l , l-conds) (f , f-eq₁)
   = record
       { get = g
       ; put = p
@@ -1202,7 +1412,7 @@ bxfoldl-inits {S} {V} {Q̃} b₀ (l , l-conds) (f , f-eq₁ , f-eq₂)
     source-cond : List S × List S → List S × List S → Set
     source-cond = CommonConditions.map-dep-cond CommonConditions.is-init
     view-cond : V × V → V × V → Set
-    view-cond = λ { (_ , b) (b′ , b′′) → Q̃ b b′ × b ≡ b′′ }
+    view-cond = CommonConditions.map-dep-cond Q̃
     g : List S × List S → V × V
     g = g-aux l b₀
     p : List S × List S → V × V → List S × List S
@@ -1308,6 +1518,29 @@ bxfoldl-inits {S} {V} {Q̃} b₀ (l , l-conds) (f , f-eq₁ , f-eq₂)
     ... | .(g′ l b₀ as′) | .(g′ l b₀ as′) | refl , refl
       rewrite g′-computation l {b₀} {as′} {a′} = cong₂ _,_ (cong proj₁ pg-eq) refl
 
+
+bfoldlᵢₙᵢₜ : ∀ {S V : Set} →
+             (Q̂ : V → V → Set) →
+             (b₀ : V) →
+             (ℓ-data : (b : V) → Σ (Lens (Maybe (S × V)) V) λ ℓ → ℓ hasConditions bfoldlᵢₙᵢₜ-component-source-condition b
+                                                                    and λ _ b′ → Q̂ b b′) →
+             (Σ (Maybe (S × V) → V) λ f → ∀ (b : V) → (m : Maybe (S × V)) → get (proj₁ (ℓ-data b)) m ≡ f m) →
+             (Σ ((as : List S) → Σ (Lens (List S) V) λ ℓ → ℓ hasConditions (λ _ as′ → CommonConditions.is-init as as′) and λ _ b′ → Q̂ (get ℓ as) b′) λ ℓ-data → (Σ (List S → V) λ f → ∀ (as as′ : List S) → get (proj₁ (ℓ-data as)) as′ ≡ f as′))
+bfoldlᵢₙᵢₜ {S} {V} Q̂ b₀ ℓ-data f-cond = Data.Product.uncurry (bmapl-component-reverse {Q̂ = Q̂}) ((Data.Product.uncurry (bxfoldl-inits {S} {V} {Q̂} b₀) component , refl , refl) , FoldlInits-Helper.g′ {S} {V} (proj₁ (proj₁ component)) b₀ , refl )
+  where component = bfoldlᵢₙᵢₜ-component Q̂ ℓ-data f-cond
+
+
+
+bscanl : ∀ {S V : Set} →
+         {Q̂ : V → V → Set} →
+         (b₀ : V) →
+         (ℓ-data : (b : V) → Σ (Lens (Maybe (S × V)) V) λ ℓ → ℓ hasConditions bfoldlᵢₙᵢₜ-component-source-condition b
+                                                                    and λ _ b′ → Q̂ b b′) →
+         (Σ (Maybe (S × V) → V) λ f → ∀ (b : V) → (m : Maybe (S × V)) → get (proj₁ (ℓ-data b)) m ≡ f m) →
+         Lens (List S) (List V)
+bscanl {S} {V} {Q̂} b₀ ℓ-data f-data = Data.Product.uncurry (bxscanl {S} {V} {Q̂} b₀) component
+  where component = bfoldlᵢₙᵢₜ-component Q̂ ℓ-data f-data
+  
 
 bxinits : ∀ {A : Set} → Lens (List A) (List (List A))
 bxinits {A}
@@ -1568,7 +1801,7 @@ hornor-rule : bxtails-dep-init ；
               spec-bxmap-sum [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ] ；
               bxmaximum-dep [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ]
               ≈
-              bxfoldl-inits {Q̃ = CommonConditions.true-cond} -∞ (bx-⊕ , refl , refl) (⊕-listf , (λ {_} {_} → refl) , refl)
+              bxfoldl-inits {Q̃ = CommonConditions.true-cond} -∞ (bx-⊕ , refl , refl) (⊕-listf , (λ {_} {_} → refl))
 hornor-rule = (λ {s} {s′} → refl)
             , (λ {v} {v′} → refl)
             , (λ {s} → get-eq s)
@@ -1577,7 +1810,7 @@ hornor-rule = (λ {s} {s′} → refl)
     l₁ = bxtails-dep-init ；
          spec-bxmap-sum [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ] ；
          bxmaximum-dep [ (λ {v} {v'} z → z) , (λ {v} {v'} z → z) ]
-    l₂ = bxfoldl-inits {Q̃ = CommonConditions.true-cond} -∞ (bx-⊕ , refl , refl) (⊕-listf , (λ {_} {_} → refl) , refl)
+    l₂ = bxfoldl-inits {Q̃ = CommonConditions.true-cond} -∞ (bx-⊕ , refl , refl) (⊕-listf , (λ {_} {_} → refl) )
     get-eq′ : ∀ xs →
               (maximum ∘ map sum ∘ tails) xs ≡ FoldlInits-Helper.g′ bx-⊕ -∞ xs
     get-eq′ = uni-hornor-rule
@@ -1648,7 +1881,7 @@ bxscanl-lemma : ∀ {S V : Set} →
                                   and            λ { (_ , b) (b′ , b′′) → Q̃ b b′ × b ≡ b′′ }) →
                 (f-data
                   : Σ (Maybe (S × V) → V)
-                    λ f → (∀ {x} {y} → get (proj₁ l-data) (x , y) ≡ (f x , y)) × b₀ ≡ f nothing) →
+                    λ f → (∀ {x} {y} → get (proj₁ l-data) (x , y) ≡ (f x , y))) →
                 
                 bxinits ； (bxmap-depl {P̃ = CommonConditions.is-init} {Q̃ = Q̃}
                                         []
@@ -1658,7 +1891,7 @@ bxscanl-lemma : ∀ {S V : Set} →
                               , (λ {v} {v'} z → z) ]
                 ≈
                 bxscanl b₀ l-data f-data
-bxscanl-lemma {S} {V} {Q̃} b₀ (l , l-conds) (f , f-eq₁ , f-eq₂)
+bxscanl-lemma {S} {V} {Q̃} b₀ (l , l-conds) (f , f-eq₁)
   = (λ {s} {s′} → refl)
   , (λ {v} {v′} → refl)
   , (λ {s} → get-fusion s)
@@ -1670,11 +1903,11 @@ bxscanl-lemma {S} {V} {Q̃} b₀ (l , l-conds) (f , f-eq₁ , f-eq₂)
                   l hasConditions
                   CommonConditions.map-dep-cond CommonConditions.is-init and
                   CommonConditions.map-dep-cond Q̃)
-    bxfold-inits-data  = bxfoldl-inits b₀ (l , l-conds) (f , f-eq₁ , f-eq₂) , refl , refl
+    bxfold-inits-data  = bxfoldl-inits b₀ (l , l-conds) (f , f-eq₁) , refl , refl
     l₂ = bxmap-depl {P̃ = CommonConditions.is-init} {Q̃ = Q̃}
                     []
                     bxfold-inits-data (FoldlInits-Helper.g′ l b₀ , λ {a} {a′} → refl)
-    l₃ = bxscanl b₀ (l , l-conds) (f , f-eq₁ , f-eq₂)
+    l₃ = bxscanl b₀ (l , l-conds) (f , f-eq₁)
     get-fusion-aux : ∀ b xs₀ xs →
                   b ≡ FoldlInits-Helper.g′ l b₀ xs₀ → 
                   Map-Helper.g-aux (proj₁ bxfold-inits-data)
